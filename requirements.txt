@@ -1,0 +1,6 @@
+# requirements.txt
+torch
+transformers
+Pillow
+numpy
+scikit-learn
