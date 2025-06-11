@@ -1,9 +1,43 @@
 # index_images.py
 import os
 import torch
-from PIL import Image
+from PIL import Image, ExifTags # Import ExifTags
 from transformers import CLIPProcessor, CLIPModel
 import numpy as np
+
+def get_image_metadata(image_path):
+    """
+    Extracts EXIF metadata from an image file.
+
+    Args:
+        image_path (str): Path to the image file.
+
+    Returns:
+        dict: A dictionary containing EXIF metadata, or None if no EXIF data is found.
+    """
+    try:
+        image = Image.open(image_path)
+        exif_data = image._getexif()
+        if exif_data is None:
+            return None
+
+        # Decode EXIF tags
+        decoded_exif_data = {}
+        for tag_id, value in exif_data.items():
+            tag = ExifTags.TAGS.get(tag_id, tag_id)
+            # Attempt to decode bytes to string if necessary
+            if isinstance(value, bytes):
+                try:
+                    value = value.decode('utf-8')
+                except UnicodeDecodeError:
+                    value = str(value) # Fallback to string representation
+
+            decoded_exif_data[tag] = value
+        return decoded_exif_data
+    except Exception as e:
+        print(f"Could not get EXIF data for {image_path}: {e}")
+        return None
+
 
 def index_images(image_folder, output_file="image_embeddings.npz"):
     """
@@ -20,6 +54,7 @@ def index_images(image_folder, output_file="image_embeddings.npz"):
 
     image_paths = []
     image_embeddings = []
+    image_metadatas = [] # List to store metadata
 
     print(f"Indexing images from: {image_folder}")
 
@@ -40,14 +75,26 @@ def index_images(image_folder, output_file="image_embeddings.npz"):
 
                 image_embeddings.append(image_embedding.squeeze().numpy())
                 image_paths.append(file_path)
+
+                # Extract and store metadata
+                metadata = get_image_metadata(file_path)
+                image_metadatas.append(metadata)
                 print(f" Indexed: {filename}")
+                if metadata:
+                    print(f"  Metadata: {metadata}")
+                else:
+                    print(f"  No metadata found for {filename}")
+
 
             except Exception as e:
                 print(f"Could not process {filename}: {e}")
 
     # Save the embeddings and paths
     if image_embeddings:
-        np.savez(output_file, embeddings=np.array(image_embeddings), paths=np.array(image_paths))
+        # Save embeddings, paths, and metadatas
+        # Convert metadatas to a format that can be saved by np.savez, e.g., a list of strings or a structured array
+        # For simplicity, saving as an object array of dictionaries.
+        np.savez(output_file, embeddings=np.array(image_embeddings), paths=np.array(image_paths), metadatas=np.array(image_metadatas, dtype=object))
         print(f"\nSuccessfully indexed {len(image_embeddings)} images.")
         print(f"Embeddings saved to {output_file}")
     else:
